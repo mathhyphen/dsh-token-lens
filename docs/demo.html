@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Token Lens · 演示数据</title>
+<!-- 本文件为公开仓库的演示页：所有数字、会话名、模型名均为虚构示例，非真实统计。 -->
+<style>
+/* 与插件 vB「柔和卡片」同源的样式（脱敏演示版） */
+.demo-root{
+  /* 宿主变量兜底 */
+  --bg1:#101418;--bg2:#171c22;--bg3:#1e242b;
+  --fg:#e8edf2;--fg2:#9aa7b4;--fg3:#697480;--fgd:#454f59;
+  --bd:rgba(154,167,180,.14);--hov:rgba(154,167,180,.10);
+  --s-input:#6cb2ff;--s-cr:#52cdb4;--s-cw:#b49af0;--s-out:#ffb066;
+  --m1:#6cb2ff;--m2:#52cdb4;--m3:#ffb066;--m4:#e79ab0;--m5:#a48adf;--m6:#8fb573;
+  --up:#63d08a;--down:#ef8e76;--accent:#6cb2ff;
+  background:var(--bg1);color:var(--fg);min-height:100vh;padding:14px;
+  font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  font-size:13px;line-height:1.5;font-variant-numeric:tabular-nums;text-wrap:pretty;
+}
+@media (prefers-color-scheme: light){
+  .demo-root{--bg1:#fff;--bg2:#f5f7f9;--bg3:#eceff2;--fg:#1a2129;--fg2:#5a6572;--fg3:#8a939e;--fgd:#c3cad1;
+    --bd:rgba(26,33,41,.10);--hov:rgba(26,33,41,.05);
+    --s-input:#2f6fce;--s-cr:#0f9080;--s-cw:#7a58cf;--s-out:#d9730f;
+    --m1:#2f6fce;--m2:#0f9080;--m3:#d9730f;--m4:#c2597a;--m5:#7a58cf;--m6:#4f7d33;
+    --up:#188a42;--down:#c2452c;--accent:#2f6fce}
+}
+html[data-theme="dark"] .demo-root{--bg1:#101418;--bg2:#171c22;--bg3:#1e242b;--fg:#e8edf2;--fg2:#9aa7b4;--fg3:#697480;--fgd:#454f59;--bd:rgba(154,167,180,.14);--hov:rgba(154,167,180,.10);--s-input:#6cb2ff;--s-cr:#52cdb4;--s-cw:#b49af0;--s-out:#ffb066;--m1:#6cb2ff;--m2:#52cdb4;--m3:#ffb066;--m4:#e79ab0;--m5:#a48adf;--m6:#8fb573;--up:#63d08a;--down:#ef8e76;--accent:#6cb2ff}
+html[data-theme="light"] .demo-root{--bg1:#fff;--bg2:#f5f7f9;--bg3:#eceff2;--fg:#1a2129;--fg2:#5a6572;--fg3:#8a939e;--fgd:#c3cad1;--bd:rgba(26,33,41,.10);--hov:rgba(26,33,41,.05);--s-input:#2f6fce;--s-cr:#0f9080;--s-cw:#7a58cf;--s-out:#d9730f;--m1:#2f6fce;--m2:#0f9080;--m3:#d9730f;--m4:#c2597a;--m5:#7a58cf;--m6:#4f7d33;--up:#188a42;--down:#c2452c;--accent:#2f6fce}
+
+*{box-sizing:border-box;margin:0;padding:0}
+.wrap{max-width:460px;margin:0 auto;display:flex;flex-direction:column;gap:10px}
+.hd{display:flex;align-items:center;gap:8px;padding-top:2px}
+h1{font-size:15px;font-weight:650}
+.fresh{display:inline-flex;align-items:center;gap:5px;color:var(--fg3);font-size:11px}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--up)}
+.spacer{flex:1}
+.iconbtn{width:28px;height:28px;border:none;border-radius:50%;background:transparent;color:var(--fg2);cursor:pointer;font-size:14px}
+.segrow{display:flex;justify-content:center}
+.seg{display:inline-flex;background:var(--bg3);border-radius:999px;padding:2px;gap:2px}
+.seg button{appearance:none;border:none;background:transparent;color:var(--fg2);font:inherit;font-size:12px;padding:3px 13px;border-radius:999px;cursor:pointer}
+.seg button.on{background:var(--bg1);color:var(--fg);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.14)}
+.card{background:var(--bg2);border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.ch2{font-size:12px;font-weight:600;color:var(--fg2);letter-spacing:.3px;display:flex;align-items:baseline;gap:8px}
+.ch2 .r{margin-left:auto;font-weight:400;color:var(--fg3);font-size:11px}
+.hero-top{display:flex;align-items:baseline;gap:10px}
+.hero-num{font-size:34px;font-weight:700;line-height:1.05;letter-spacing:-.5px}
+.chip{display:inline-flex;border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:600}
+.chip.up{color:var(--down);background:color-mix(in srgb,var(--down) 14%,transparent)}
+.hero-sub{color:var(--fg3);font-size:11.5px}
+.mixbar{display:flex;height:6px;border-radius:3px;overflow:hidden;gap:2px}
+.mixbar i{border-radius:2px}
+.legend{display:flex;gap:12px;flex-wrap:wrap;color:var(--fg3);font-size:11px}
+.legend i{display:inline-block;width:8px;height:8px;border-radius:2.5px;margin-right:5px}
+.hero-bottom{display:flex;align-items:flex-end;gap:14px}
+.hero-cap{color:var(--fg2);font-size:12px;line-height:1.65;flex:1}
+.ring-wrap{margin-left:auto;text-align:center;flex:none}
+.ring{position:relative;width:74px;height:74px}
+.ring svg{transform:rotate(-90deg)}
+.ring-val{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1}
+.ring-val b{font-size:17px;font-weight:700}
+.ring-val span{font-size:9.5px;color:var(--fg3)}
+.ring-cap{font-size:10.5px;color:var(--fg3);margin-top:4px}
+.mini3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.mini{background:var(--bg2);border-radius:14px;padding:10px 12px}
+.mini b{display:block;font-size:18px;font-weight:700}
+.mini span{font-size:11px;color:var(--fg3)}
+.chartbox svg{display:block;width:100%;height:150px}
+.axis{display:flex;justify-content:space-between;color:var(--fgd);font-size:10px;margin-top:4px}
+.spectrum{display:flex;height:10px;border-radius:5px;overflow:hidden;gap:2px;margin-bottom:4px}
+.mrow{padding:7px 0;border-top:1px solid var(--bd);display:flex;flex-direction:column;gap:5px}
+.mrow.hl{border-top:none;padding-top:2px}
+.mline{display:flex;align-items:baseline;gap:8px}
+.mname{display:flex;align-items:center;gap:7px;min-width:0;flex:1;font-size:12px}
+.mname em{font-style:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mname i{width:8px;height:8px;border-radius:2.5px;flex:none}
+.mpct{font-weight:650;font-size:12px}
+.mtok{color:var(--fg3);font-size:11px;min-width:56px;text-align:right}
+.mtrack{height:5px;border-radius:2.5px;background:var(--bg3);overflow:hidden}
+.mtrack i{display:block;height:100%;border-radius:2.5px}
+.heat{display:flex;align-items:flex-end;gap:3px;height:56px}
+.heat i{flex:1;border-radius:3px 3px 1px 1px;background:var(--accent)}
+.haxis{display:flex;justify-content:space-between;color:var(--fgd);font-size:10px;margin-top:5px}
+.trow{display:flex;gap:9px;align-items:baseline;padding:7px 0;border-top:1px solid var(--bd)}
+.trow.hl{border-top:none;padding-top:2px}
+.trank{color:var(--accent);font-weight:700;font-size:11px;min-width:15px;text-align:right}
+.ttitle{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px}
+.tval{color:var(--fg3);font-size:11px;white-space:nowrap}
+.note{color:var(--fgd);font-size:10.5px;line-height:1.6;padding:0 4px}
+.eff{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.eff>div{background:var(--bg3);border-radius:10px;padding:9px 12px}
+.eff b{display:block;font-size:16px;font-weight:700}
+.eff span{font-size:10.5px;color:var(--fg3)}
+@media (min-width:540px){.wrap{max-width:860px}.cols{display:grid;grid-template-columns:11fr 9fr;gap:10px;align-items:start}.colv{display:flex;flex-direction:column;gap:10px}}
+.themetoggle{margin:4px auto 0;display:block;appearance:none;border:1px solid var(--bd);background:var(--bg2);color:var(--fg2);font:inherit;font-size:11px;border-radius:999px;padding:4px 14px;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="demo-root" id="root">
+<div class="wrap">
+  <div class="hd"><h1>Token Lens</h1><span class="fresh"><span class="dot"></span>数据截止 18:20 · 刚刚（演示数据）</span><span class="spacer"></span><button class="iconbtn">⟳</button></div>
+  <div class="segrow"><div class="seg"><button class="on">日</button><button>周</button><button>月</button><button>年</button></div></div>
+  <div class="cols">
+  <div class="colv">
+    <section class="card">
+      <div class="ch2">今日用量<span class="r">2026-08-23</span></div>
+      <div class="hero-top"><span class="hero-num">42.58M</span><span class="chip up">▲ 8.2%</span></div>
+      <div class="hero-sub">较昨日 · 输入 5.1M · 输出 0.6M · 缓存读 36.8M</div>
+      <div class="mixbar"><i style="width:12%;background:var(--s-input)"></i><i style="width:86%;background:var(--s-cr)"></i><i style="width:.5%;background:var(--s-cw)"></i><i style="width:1.5%;background:var(--s-out)"></i></div>
+      <div class="legend"><span><i style="background:var(--s-input)"></i>未缓存输入</span><span><i style="background:var(--s-cr)"></i>缓存读</span><span><i style="background:var(--s-cw)"></i>缓存写</span><span><i style="background:var(--s-out)"></i>输出</span></div>
+      <div class="hero-bottom">
+        <div class="hero-cap">缓存命中意味着大部分上下文被复用而未重复计费——这个数字越高，同样的对话越便宜。</div>
+        <div class="ring-wrap">
+          <div class="ring"><svg width="74" height="74" viewBox="0 0 74 74"><circle cx="37" cy="37" r="31" fill="none" stroke="var(--bg3)" stroke-width="8"/><circle cx="37" cy="37" r="31" fill="none" stroke="var(--s-cr)" stroke-width="8" stroke-linecap="round" stroke-dasharray="167.5 27.1"/></svg><div class="ring-val"><b>86%</b><span>命中率</span></div></div>
+          <div class="ring-cap">缓存替你省下的部分</div>
+        </div>
+      </div>
+    </section>
+    <div class="mini3"><div class="mini"><b>14</b><span>会话</span></div><div class="mini"><b>520</b><span>请求</span></div><div class="mini"><b>168</b><span>回合</span></div></div>
+    <section class="card">
+      <div class="ch2">用量趋势 · 四色堆叠<span class="r">近 30 天</span></div>
+      <div class="chartbox"><svg id="chart" viewBox="0 0 360 150" preserveAspectRatio="none"></svg></div>
+      <div class="axis"><span>07/25</span><span>08/01</span><span>08/08</span><span>08/16</span><span>08/23</span></div>
+      <div class="legend"><span><i style="background:var(--s-input)"></i>输入</span><span><i style="background:var(--s-cr)"></i>缓存读</span><span><i style="background:var(--s-cw)"></i>缓存写</span><span><i style="background:var(--s-out)"></i>输出</span><span style="margin-left:auto;color:var(--fg3)">▲ 峰值 08/09 · 55.2M</span></div>
+    </section>
+    <section class="card">
+      <div class="ch2">效率速览<span class="r">区间统计</span></div>
+      <div class="eff">
+        <div><b>253.5K</b><span>均摊每回合 tokens</span></div>
+        <div><b>1.4%</b><span>输出占总用量</span></div>
+        <div><b>30/30</b><span>活跃天数</span></div>
+        <div><b>18.4%</b><span>头部会话集中度</span></div>
+      </div>
+    </section>
+    <p class="note">口径：总输入 = 未缓存输入 + 缓存读 + 缓存写；reasoning 含于输出不另加；本地时区分桶。wow +8.2% · mom −2.6%。本页为虚构演示数据。</p>
+  </div>
+  <div class="colv">
+    <section class="card">
+      <div class="ch2">模型占比<span class="r">按区间 tokens</span></div>
+      <div class="spectrum" id="spec"></div>
+      <div id="mlist"></div>
+    </section>
+    <section class="card">
+      <div class="ch2">24 小时分布<span class="r">本地时间</span></div>
+      <div class="heat" id="heat"></div>
+      <div class="haxis"><span>0</span><span>6</span><span>12</span><span>18</span><span>23</span></div>
+    </section>
+    <section class="card">
+      <div class="ch2">Top 会话<span class="r">按 tokens 前 8</span></div>
+      <div id="tlist"></div>
+    </section>
+  </div>
+  </div>
+  <button class="themetoggle" id="themeBtn">预览深浅色</button>
+</div>
+</div>
+<script>
+(function(){
+const MODELS=[["nova/main-pro",42.3,"--m1"],["quark/flash-mini",18.6,"--m2"],["atlas/reasoner-x",12.4,"--m3"],
+ ["zephyr/turbo",9.8,"--m4"],["lumen/vision",7.2,"--m5"]];
+const OTHER={n:5,pct:9.7};
+const HEAT=[2,1,1,1,2,4,9,18,29,41,52,58,49,44,57,66,61,55,63,78,92,100,84,41];
+const SESSIONS=[["数据管道重构：清洗脚本优化",7.84],["实验记录整理与可视化",6.42],["API 网关配置排查",5.18],
+ ["季度汇报幻灯片起草",4.26],["代码评审：缓存模块",3.59],["学习笔记：概率图模型",2.54],
+ ["周报自动生成工具",1.83],["差旅行程规划",1.28]];
+function genDays(){
+  const vals=[18,22,26,15,9,5,7,24,29,34,55.2,38,27,41,47,52,44,31,19,35,43,49,46,33,21,28,37,45,40,42.58];
+  const start=new Date(2026,6,25),labels=[];
+  for(let i=0;i<30;i++){const d=new Date(start);d.setDate(d.getDate()+i);labels.push((d.getMonth()+1)+"/"+d.getDate());}
+  return vals.map((total,i)=>{const f_in=.115,f_out=.014,f_cw=i<20?0:.002;
+    return {label:labels[i],input:+(total*f_in).toFixed(1),cr:+(total-total*f_in-total*f_out-total*f_cw).toFixed(1),cw:+(total*f_cw).toFixed(2),out:+(total*f_out).toFixed(1)};});
+}
+const fmt=n=>n>=1000?(n/1000).toFixed(1)+"B":n>=1?+n.toFixed(1)+"M":Math.round(n*1000)+"K";
+const buckets=genDays(),peakIdx=10,max=Math.max(...buckets.map(b=>b.input+b.cr+b.cw+b.out));
+const svg=document.getElementById("chart"),W=360,H=150,PAD_T=16,PAD_B=4,n=buckets.length,step=(W-8)/n,bw=Math.max(4,step*.62);
+buckets.forEach((b,i)=>{
+  const segs=[[b.input,"var(--s-input)"],[b.cr,"var(--s-cr)"],[b.cw,"var(--s-cw)"],[b.out,"var(--s-out)"]];
+  let y=H-PAD_B;const x=4+i*step+(step-bw)/2,h=t=>t/max*(H-PAD_T-PAD_B);
+  const col=document.createElementNS("http://www.w3.org/2000/svg","g");
+  segs.forEach(s=>{if(s[0]<=0)return;const hh=h(s[0]);y-=hh;
+    const r=document.createElementNS("http://www.w3.org/2000/svg","rect");
+    r.setAttribute("x",x);r.setAttribute("y",y);r.setAttribute("width",bw);r.setAttribute("height",Math.max(hh-.5,.8));
+    r.setAttribute("rx",Math.min(2.5,bw/2));r.setAttribute("fill",s[1]);col.append(r);});
+  if(i===peakIdx){const c=document.createElementNS("http://www.w3.org/2000/svg","circle");
+    c.setAttribute("cx",x+bw/2);c.setAttribute("cy",y-8);c.setAttribute("r",2.5);c.setAttribute("fill","var(--accent)");
+    const t=document.createElementNS("http://www.w3.org/2000/svg","text");
+    t.setAttribute("x",x+bw/2+8);t.setAttribute("y",y-5);t.setAttribute("font-size","9");t.setAttribute("fill","var(--fg2)");
+    t.textContent=b.label+" · "+fmt(b.input+b.cr+b.cw+b.out);col.append(c,t);}
+  svg.append(col);
+});
+const spec=document.getElementById("spec");
+MODELS.forEach(m=>{const i=document.createElement("i");i.style.cssText="width:"+m[1]+"%;background:var("+m[2]+")";spec.append(i);});
+const oi=document.createElement("i");oi.style.cssText="width:"+OTHER.pct+"%;background:var(--bg3)";spec.append(oi);
+const ml=document.getElementById("mlist");
+MODELS.forEach((m,i)=>{const r=document.createElement("div");r.className="mrow"+(i===0?" hl":"");
+  r.innerHTML='<div class="mline"><span class="mname"><i style="background:var('+m[2]+')"></i><em>'+m[0]+'</em></span><span class="mpct">'+m[1].toFixed(1)+'%</span><span class="mtok">'+(m[1]*10.1).toFixed(1)+'M</span></div><div class="mtrack"><i style="width:'+m[1]+'%;background:var('+m[2]+')"></i></div>';ml.append(r);});
+const orow=document.createElement("div");orow.className="mrow";
+orow.innerHTML='<div class="mline"><span class="mname"><i style="background:var(--bg3);outline:1px solid var(--bd)"></i><em style="color:var(--fg3)">其他 ×'+OTHER.n+' 个模型</em></span><span class="mpct">'+OTHER.pct.toFixed(1)+'%</span><span class="mtok">—</span></div>';ml.append(orow);
+const he=document.getElementById("heat"),hmax=Math.max(...HEAT);
+HEAT.forEach(v=>{const i=document.createElement("i");i.style.height=Math.max(v/hmax*100,6)+"%";i.style.opacity=v===0?.08:(.18+v/hmax*.82);he.append(i);});
+const tl=document.getElementById("tlist");
+SESSIONS.forEach((s,i)=>{const r=document.createElement("div");r.className="trow"+(i===0?" hl":"");
+  r.innerHTML='<span class="trank">'+(i+1)+'</span><span class="ttitle">'+s[0]+'</span><span class="tval">'+s[1].toFixed(2)+'M</span>';tl.append(r);});
+const mb=window.matchMedia("(prefers-color-scheme: light)");
+function applyTheme(t){document.documentElement.dataset.theme=t}
+applyTheme(mb.matches?"light":"dark");
+document.getElementById("themeBtn").addEventListener("click",()=>applyTheme(document.documentElement.dataset.theme==="dark"?"light":"dark"));
+})();
+</script>
+</body>
+</html>

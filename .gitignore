@@ -1,0 +1,19 @@
+# 构建产物与依赖
+node_modules/
+lib/
+*.tsbuildinfo
+*.tgz
+tests/.tmp-dsh-home*/
+
+# 本机内部文件（不入仓库）
+docs/research.md
+design/
+.review-token-lens/
+viz/
+.agent-teams/
+.agent-graph/
+
+# 杂项
+*.log
+.DS_Store
+Thumbs.db
