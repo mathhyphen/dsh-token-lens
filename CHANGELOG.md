@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.2 — 2026-09-08
+
+- 修复：左侧边栏底部常驻「Token Lens」按钮（入口位置错乱）——兜底入口
+  （`sidebar.footer.action`）原先只靠「标签注册成功后 dispose」撤除，依赖两个
+  回调的先后顺序；footer 槽位声明晚于标签注册时 dispose 落空，按钮注册后再无
+  人撤。改为状态驱动（`useSyncExternalStore` + 模块级 tabRegistered），与顺序无关。
+- 修复：同 id 标签已在册（重复加载/热重载残留）不再被当成注册失败——视为就位
+  并撤掉兜底入口；真失败时才保留兜底，并把原因打 `console.error`。
+- 新增：`tests/smoke-client-entry.mjs` —— 四种时序（正常/竞态/重复/真失败）的
+  入口退场契约回归，直接跑构建产物，`node tests/smoke-client-entry.mjs`。
+
 ## 0.3.1 — 2026-08-24
 
 - 修复：趋势图峰值标注在最高柱时被画布上沿裁切 → 标注移到圆点侧面，靠右自动换边

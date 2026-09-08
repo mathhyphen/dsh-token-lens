@@ -7,8 +7,47 @@
  * 返回 ReactNode。DeepTrace 生产先例：dsh-whale-report lib/client.js registerTab 调用。
  * 兜底：better-sidebar 服务不存在时退回 sidebar.footer.action 按钮 + 命令式悬浮层。
  */
+import { useSyncExternalStore } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { TokenLensPanel } from './panel'
+
+/* ── Tab 就位状态（模块级外部 store）────────────────────────────────────────
+ * 2026-09-08 位置错乱修复：兜底按钮此前靠「标签注册成功后 dispose」撤除，
+ * 依赖 slots.inject 回调与 ctx.inject(['betterSidebar']) 回调的先后顺序——
+ * 若 footer 槽位声明晚于标签注册（DSH 更新后 ui-sidebar 的槽位声明时机变了），
+ * 回调会在标签就位之后才跑，footerDisposer 当时还是 null，于是按钮注册了就
+ * 再也没人撤 → 左侧边栏底部一直多一个 Token Lens 按钮。
+ * 改为状态驱动（照抄 dsh-whale-report 的 FallbackDrawer 做法）：标签一就位，
+ * 兜底组件自己渲染 null，与注册顺序无关。
+ * ──────────────────────────────────────────────────────────────────────── */
+let tabRegistered = false
+const tabModeListeners = new Set<() => void>()
+
+/** 标签是否已就位（兜底入口据此退场）。 */
+export function isLensTabRegistered(): boolean {
+  return tabRegistered
+}
+
+/** 标记标签就位/退场，并通知兜底组件重渲染。 */
+export function setLensTabRegistered(next: boolean): void {
+  if (tabRegistered === next) return
+  tabRegistered = next
+  for (const listener of tabModeListeners) {
+    try {
+      listener()
+    } catch {
+      /* 单个订阅者异常不影响其他订阅者 */
+    }
+  }
+}
+
+/** useSyncExternalStore 的订阅/快照对（服务端快照恒 false）。 */
+function subscribeTabMode(listener: () => void): () => void {
+  tabModeListeners.add(listener)
+  return () => {
+    tabModeListeners.delete(listener)
+  }
+}
 
 /* ── 图标：透镜/仪表盘小图标（描边跟随 currentColor，尺寸自适应）── */
 export function LensIcon(props: { size: number }): JSX.Element {
@@ -45,7 +84,7 @@ function asDisposer(raw: unknown): Disposable | null {
  * 返回宿主 disposer 的规范化包装（调用即移除标签类型）。
  */
 export function registerLensTab(service: TabService): Disposable | null {
-  return asDisposer(
+  const disposer = asDisposer(
     service.registerTab({
       id: 'dsh-token-lens',
       title: 'Token Lens',
@@ -55,6 +94,15 @@ export function registerLensTab(service: TabService): Disposable | null {
       component: () => <TokenLensTab />,
     }),
   )
+  // 标签就位 → 兜底组件立刻退场（状态驱动，不依赖调用顺序）
+  setLensTabRegistered(true)
+  if (disposer === null) return null
+  return {
+    dispose: (): void => {
+      disposer.dispose()
+      setLensTabRegistered(false)
+    },
+  }
 }
 
 
@@ -123,8 +171,11 @@ export function toggleLensOverlay(): void {
   else openLensOverlay()
 }
 
-/** 兜底按钮组件：宽栏=文字行内钮，窄栏(56px rail)=图标圆钮；自身零状态。 */
-export function LensEntry(props: { wide?: boolean }): JSX.Element {
+/** 兜底按钮组件：宽栏=文字行内钮，窄栏(56px rail)=图标圆钮；自身零状态。
+ * 标签页一旦就位即渲染 null（状态驱动退场——顺序无关，见文件头说明）。 */
+export function LensEntry(props: { wide?: boolean }): JSX.Element | null {
+  const tabMode = useSyncExternalStore(subscribeTabMode, isLensTabRegistered, () => false)
+  if (tabMode) return null
   const wide = props.wide !== false
   return (
     <button
