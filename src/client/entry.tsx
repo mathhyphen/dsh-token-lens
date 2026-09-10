@@ -161,69 +161,82 @@ export function registerLensTab(service: TabService): Disposable | null {
 }
 
 
-/* ── 以下为兜底入口：sidebar.footer.action 按钮 + 命令式全屏悬浮层 ── */
+/* ── 悬浮卡片：顶层（top layer）`<dialog showModal()>` 承载 ──
+ * 2026-09-10 v0.3.5：从「body 里 position:fixed 的 div」换成原生 dialog。
+ * 理由：fixed 元素会被任何带 transform/filter/backdrop-filter 的祖先当成包含块
+ * （皮肤/动效插件很容易加），一旦被劫持就会渲染到视口外——表现正是"点了没反应"。
+ * dialog 走浏览器顶层渲染，免疫堆叠上下文与包含块；Esc / 遮罩点击原生可用，
+ * 免掉自己维护 keydown 监听。 */
 
-let overlayHost: HTMLDivElement | null = null
+let overlayHost: HTMLDialogElement | null = null
 let overlayRoot: Root | null = null
-let escHandler: ((e: KeyboardEvent) => void) | null = null
+let overlayOpenedAt = 0
 
 /** 关闭并完全卸载悬浮层（幂等）。插件 dispose 时也会调用，保证卸载即净。 */
 export function closeLensOverlay(): void {
-  if (escHandler !== null) {
-    window.removeEventListener('keydown', escHandler)
-    escHandler = null
-  }
   if (overlayRoot !== null) {
     overlayRoot.unmount()
     overlayRoot = null
   }
-  if (overlayHost !== null) {
-    overlayHost.remove()
-    overlayHost = null
+  const host = overlayHost
+  overlayHost = null
+  if (host !== null) {
+    try {
+      if (host.open) host.close()
+    } catch {
+      /* 已关闭 */
+    }
+    host.remove()
   }
 }
 
 function openLensOverlay(): void {
   if (overlayHost !== null) return
-  const host = document.createElement('div')
-  host.dataset.tlOverlay = 'true'
-  document.body.appendChild(host)
-  overlayHost = host
+  const dialog = document.createElement('dialog')
+  dialog.className = 'tl-dialog'
+  dialog.dataset.tlOverlay = 'true'
+  document.body.appendChild(dialog)
+  overlayHost = dialog
+  overlayOpenedAt = Date.now()
 
-  const mountedAt = Date.now()
-  // 忽略挂载后极短时间内的关闭手势：防「打开它的同一次指针操作」的残留事件误关
-  const onCloseGuarded = (): void => {
-    if (Date.now() - mountedAt > 200) closeLensOverlay()
-  }
-  escHandler = (e: KeyboardEvent): void => {
-    if (e.key === 'Escape') closeLensOverlay()
-  }
-  window.addEventListener('keydown', escHandler)
+  // Esc：原生 cancel 事件（阻止默认的"直接关掉"，交给统一出口做清理）
+  dialog.addEventListener('cancel', (event) => {
+    event.preventDefault()
+    closeLensOverlay()
+  })
+  // 点遮罩关闭：dialog 自身即遮罩命中目标（内容在 .tl-modal 里）。
+  // 400ms 窗口内忽略：连点/同一次指针操作的残留事件不该把刚开的卡片关掉。
+  dialog.addEventListener('click', (event) => {
+    if (event.target === dialog && Date.now() - overlayOpenedAt > 400) closeLensOverlay()
+  })
 
-  overlayRoot = createRoot(host)
+  overlayRoot = createRoot(dialog)
   overlayRoot.render(
-    <div
-      className="tl-overlay"
-      role="dialog"
-      aria-modal="true"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onCloseGuarded()
-      }}
-    >
-      <div className="tl-modal">
-        <button type="button" className="tl-close" onClick={closeLensOverlay} title="关闭（Esc）" aria-label="关闭 Token Lens">
-          ×
-        </button>
-        <TokenLensPanel />
-      </div>
+    <div className="tl-modal" role="dialog" aria-modal="true" aria-label="Token Lens">
+      <button type="button" className="tl-close" onClick={closeLensOverlay} title="关闭（Esc）" aria-label="关闭 Token Lens">
+        ×
+      </button>
+      <TokenLensPanel />
     </div>,
   )
+  try {
+    dialog.showModal()
+  } catch (error) {
+    // 极老的内核没有 showModal：退回 open 属性（仍渲染，只是不在顶层）
+    console.warn('[token-lens] showModal 不可用，退回普通浮层：', error)
+    dialog.setAttribute('open', '')
+  }
+  console.info('[token-lens] 悬浮卡片已打开')
 }
 
-/** 兜底按钮点击：开合命令式悬浮层；stopPropagation 防宿主全局点击行为干扰。 */
+/** 开合悬浮层。同一指针操作可能派发两次 click（连点/宿主冒泡），
+ * 用 300ms 窗口忽略紧随其后的一次，避免"点一下开了又关"。 */
 export function toggleLensOverlay(): void {
-  if (overlayHost !== null) closeLensOverlay()
-  else openLensOverlay()
+  if (overlayHost !== null) {
+    if (Date.now() - overlayOpenedAt < 400) return
+    closeLensOverlay()
+    console.info('[token-lens] 悬浮卡片已关闭')
+  } else openLensOverlay()
 }
 
 /** 兜底按钮组件：宽栏=文字行内钮，窄栏(56px rail)=图标圆钮；自身零状态。

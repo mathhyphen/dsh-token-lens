@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.5 — 2026-09-10
+
+- **悬浮卡片改用顶层（top layer）原生 `<dialog showModal()>`**：此前的 `body` 内
+  `position: fixed` 浮层会被任何带 `transform` / `filter` / `backdrop-filter` 的祖先
+  当成包含块（皮肤/动效类插件很容易加），一旦被劫持就会渲染到视口外——表现正是
+  "按钮点得动、但页面不出现"。dialog 走浏览器顶层渲染，免疫堆叠上下文与包含块，
+  Esc（原生 cancel）与遮罩点击（`::backdrop`）也由原生语义承担。
+- 防连点：同一 400ms 窗口内的第二次点击不再立刻关闭刚开的卡片（连点/宿主事件
+  冒泡导致的"开了又关"）；开/关各打一行 `[token-lens]` 日志便于自查。
+# Changelog
+
 ## 0.3.4 — 2026-09-10
 
 - 新增**会话头部入口**（官方槽位 `conversation.session.header.actions`，与内置的

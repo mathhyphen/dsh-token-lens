@@ -191,14 +191,14 @@ export const PANEL_CSS = `
 }
 .tl-header-action:focus-visible { outline-offset: 1px; }
 
-/* ── 悬浮卡片（头部入口 / 兜底入口共用）── */
-.tl-overlay {
-  position: fixed; inset: 0; z-index: 2147000000;
-  display: flex; align-items: flex-start; justify-content: center;
-  padding: 6vh 24px 24px; background: rgba(12, 15, 20, .42);
+/* ── 悬浮卡片（顶层 dialog 承载：免疫堆叠上下文/包含块）── */
+.tl-dialog {
+  width: min(1000px, 92vw); max-width: none; max-height: none;
+  padding: 0; border: none; background: transparent; overflow: visible;
 }
+.tl-dialog::backdrop { background: rgba(12, 15, 20, .42); }
 .tl-modal {
-  position: relative; width: min(980px, 100%); max-height: 86vh; overflow: auto;
+  position: relative; width: 100%; max-height: 86vh; overflow: auto;
   padding: 16px 18px 20px; border-radius: 18px;
   background: var(--dsw-alias-bg-layer-1, #101418);
   border: 1px solid var(--dsw-alias-border-l2, rgba(154, 167, 180, .14));
