@@ -1,6 +1,6 @@
 {
   "name": "@dsh-external/dsh-token-lens",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "DSH token 用量统计面板——全局入口，全部会话的日/周/月/年聚合、模型占比、趋势洞察",
   "private": true,
   "type": "module",

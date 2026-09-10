@@ -109,6 +109,8 @@ export interface SummaryPayload {
     turns: number
   }>
   partial: PartialInfo
+  /** true = 本次是「已落盘索引」的即时视图（宿主后台仍在重建索引） */
+  stale: boolean
   refresh: { durationMs: number; freshWindowMs: number; indexTtlMs: number }
 }
 
@@ -205,6 +207,8 @@ export async function buildSummary(svc: LensServices, params: SummaryParams): Pr
     },
     topSessions,
     partial: outcome.partial,
+    /** true = 这是「已落盘索引」的即时视图，后台仍在重建（计数可能不是最新） */
+    stale: outcome.stale === true,
     refresh: { durationMs: outcome.durationMs, freshWindowMs: FRESH_MS, indexTtlMs: INDEX_TTL_MS },
   }
 }

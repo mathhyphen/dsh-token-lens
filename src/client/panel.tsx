@@ -20,6 +20,11 @@ import {
 } from './util'
 import { HeatStrip, HitRateRing, ModelShare, TrendChart } from './charts'
 
+/** stale 响应（宿主后台仍在重建索引）时的自动重取：间隔与次数上限。
+ *  会话多、日志大的机器上冷索引可能几分钟，这里让面板自己等到真数据，而不是永远转圈。 */
+const STALE_RETRY_MS = 15000
+const MAX_STALE_TRIES = 16
+
 interface Entry extends CacheEntry {}
 
 function totalOf(t: { input: number; output: number; cacheRead: number; cacheWrite: number }): number {
@@ -36,6 +41,9 @@ function DeltaChip({ pct }: { pct: number | null }): JSX.Element {
 export function TokenLensPanel(_props: unknown): JSX.Element {
   // ── 缓存优先：挂载即用 localStorage 里上一次的数据渲染 ──
   const cacheRef = useRef<CacheMap>(loadCache())
+  /** stale 自动重取的计数与定时器（组件卸载时清掉） */
+  const staleTries = useRef(0)
+  const staleTimer = useRef<number | null>(null)
   const [g, setG] = useState<Granularity>('day')
   const [entry, setEntry] = useState<Entry | undefined>(() => cacheRef.current['day'])
   const [net, setNet] = useState<'loading' | 'ok' | 'error'>('loading')
@@ -54,10 +62,28 @@ export function TokenLensPanel(_props: unknown): JSX.Element {
         saveCache(next)
         setEntry(next[gran])
         setNet('ok')
+        // stale：宿主还在后台重建索引（会话多/日志大时可能几分钟）→ 过一会儿自动再取一次
+        if (summary.stale === true && staleTries.current < MAX_STALE_TRIES) {
+          staleTries.current += 1
+          if (staleTimer.current !== null) clearTimeout(staleTimer.current)
+          staleTimer.current = window.setTimeout(() => {
+            staleTimer.current = null
+            void refresh(gran)
+          }, STALE_RETRY_MS)
+        } else {
+          staleTries.current = 0
+        }
       } catch (error) {
         setNet('error')
         setErrMsg(error instanceof Error ? error.message : String(error))
       }
+    },
+    [],
+  )
+
+  useEffect(
+    () => () => {
+      if (staleTimer.current !== null) clearTimeout(staleTimer.current)
     },
     [],
   )

@@ -81,6 +81,8 @@ export interface RefreshOutcome {
   partial: PartialInfo
   /** listSessions 列出的总会话数 */
   listedCount: number
+  /** true = 本次响应用的是已落盘索引（后台仍在重建），数据可能不是最新 */
+  stale?: boolean
 }
 
 /** 插件运行期共享服务容器。 */
@@ -191,24 +193,74 @@ async function refreshOnce(svc: LensServices): Promise<RefreshOutcome> {
 }
 
 /**
- * 取当前可用数据：新鲜度窗口内直接复用上次结果；否则触发 refresh（单飞，
- * 并发请求共享同一次采集）。首次调用在预热完成前到达时，会同步等这次采集。
+ * 用「已落盘索引」拼一个可用视图 —— 纯内存操作，毫秒级。
+ *
+ * 为什么需要它：冷启动（或索引过期）时 refreshOnce 要重读几百个会话日志，
+ * 在有大量会话/损坏日志的机器上会跑好几分钟；此时若让 API 阻塞等待，面板就会
+ * 一直停在「加载中…」（用户视角＝功能坏了）。所以先拿旧索引秒回，刷新在后台继续，
+ * 下次请求自然拿到新数据。
+ */
+function indexSnapshot(svc: LensServices): RefreshOutcome | null {
+  const sessions = svc.store?.state?.sessions
+  if (sessions === undefined || sessions === null) return null
+  const persisted = Object.values(sessions).filter((r) => r !== undefined && r !== null)
+  if (persisted.length === 0) return null
+  return {
+    at: svc.store.state.builtAt ?? 0,
+    durationMs: 0,
+    persisted,
+    live: [],
+    partial: svc.store.state.partial ?? { skippedCount: 0, skippedSessionIds: [], reasons: [] },
+    listedCount: persisted.length,
+    stale: true,
+  }
+}
+
+/** 等待 refresh 落地的宽限：窗口内完成就用新数据，否则先回旧索引。 */
+const ENSURE_GRACE_MS = 1500
+
+/**
+ * 取当前可用数据：
+ *  1. 新鲜度窗口内直接复用上次结果；
+ *  2. 否则触发 refresh（单飞，并发请求共享同一次采集）；
+ *  3. 已有落盘索引时最多等 ENSURE_GRACE_MS —— 超时即用旧索引返回（stale:true），
+ *     刷新继续在后台跑，绝不把请求挂死；
+ *  4. 完全没有索引（真·首次）才同步等待这次采集。
  */
 export async function ensureData(svc: LensServices): Promise<RefreshOutcome> {
   const last = svc.last
   if (last !== null && Date.now() - last.at < FRESH_MS) return last
   if (svc.refreshing === null) {
-    svc.refreshing = refreshOnce(svc).finally(() => {
-      svc.refreshing = null
-    })
+    svc.refreshing = startRefresh(svc)
   }
-  return svc.refreshing
+  const pending = svc.refreshing
+  const snapshot = indexSnapshot(svc)
+  if (snapshot === null) return pending // 真·冷启动：没有旧索引可显，只能等
+  const settled = await Promise.race([
+    pending.then(
+      () => true,
+      () => true,
+    ),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), ENSURE_GRACE_MS)),
+  ])
+  if (settled && svc.last !== null) return svc.last
+  svc.log(`索引仍在后台重建（${snapshot.persisted.length} 条旧索引可用），本次先返回既有索引`)
+  return snapshot
 }
 
-/** 后台预热：启动后为全部会话建索引（无时间上限；一次性）。 */
+/** 启动一次 refresh 并挂上单飞锁（warm 与 ensureData 共用，避免并发跑两遍全量）。 */
+function startRefresh(svc: LensServices): Promise<RefreshOutcome> {
+  const run = refreshOnce(svc).finally(() => {
+    svc.refreshing = null
+  })
+  svc.refreshing = run
+  return run
+}
+
+/** 后台预热：启动后为全部会话建索引（无时间上限；一次性）。走同一把单飞锁。 */
 export async function warm(svc: LensServices): Promise<void> {
   try {
-    await refreshOnce(svc)
+    await (svc.refreshing ?? startRefresh(svc))
   } catch (error) {
     // 预热失败不致命：下次 API/工具调用会按需重试
     svc.log(`warm 失败（将在下次查询时重试）：${error instanceof Error ? error.message : String(error)}`)

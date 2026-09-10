@@ -15,6 +15,7 @@
  */
 import type { SlotsService } from '@deepseek-ai/dsh-client-ui-slots'
 import {
+  BUILTIN_TAB_KIND,
   LensEntry,
   TokenLensChip,
   TokenLensHeaderAction,
@@ -23,6 +24,7 @@ import {
   closeLensOverlay,
   isLensTabRegistered,
   registerLensTab,
+  setDockedOpener,
   setLensTabRegistered,
 } from './entry'
 import { PANEL_CSS } from './theme'
@@ -35,6 +37,9 @@ type ClientContext = {
 
 /** DSH 0.1.5+ 内建右侧栏的页签注册表（ctx.sidebarRightTabs）。 */
 type RightTabRegistry = { register: (definition: Record<string, unknown>) => unknown }
+
+/** DSH 0.1.5+ 内建右侧栏的导航面（ctx.sidebarRight）：openTab 由内核拉开侧栏。 */
+type RightBarService = { openTab?: (kind: string, options?: Record<string, unknown>) => void }
 
 /** 页签正文/标题槽位的 entryKey（= definition.id）。 */
 const BUILTIN_TAB_ID = 'dsh-token-lens'
@@ -169,18 +174,28 @@ export function apply(ctx: ClientContext): void {
     return { dispose: (): void => { for (const step of steps) step() } }
   }
 
-  ctx.inject(['sidebarRightTabs'], (injected) => {
+  ctx.inject(['sidebarRightTabs', 'sidebarRight'], (injected) => {
     const registry = injected.sidebarRightTabs as RightTabRegistry | undefined
+    const rightbar = injected.sidebarRight as RightBarService | undefined
     if (registry === undefined || tabRegistered) return
     tabRegistered = true
     ctx.effect(() => {
       const disposer = tryRegisterBuiltinTab(registry)
+      if (rightbar !== undefined && typeof rightbar.openTab === 'function') {
+        // 头部按钮 → 宿主右侧栏：由内核拉开侧栏并切到本页签（官方路径，最稳）
+        setDockedOpener(() => {
+          rightbar.openTab?.(BUILTIN_TAB_KIND)
+          console.info('[token-lens] 已请求宿主打开右侧栏 Token Lens 页签')
+          return true
+        })
+      }
       if (isLensTabRegistered()) {
         footerDisposer?.dispose()
         footerDisposer = null
       }
       return combine(
         () => disposer?.dispose(),
+        () => setDockedOpener(null),
         () => closeLensOverlay(),
       )
     }, 'dsh-token-lens: builtin right sidebar tab')

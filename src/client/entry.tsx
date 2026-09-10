@@ -67,8 +67,31 @@ export function TokenLensTab(): JSX.Element {
 }
 
 /* ── 会话头部入口（官方槽位 conversation.session.header.actions）──
- * 一个 28px 圆形图标按钮，点开/收起悬浮卡片（悬浮层由本文件的命令式实现承载：
- * esc / 点遮罩关闭）。位置随会话标题栏，属于宿主给插件预留的正规座位。 */
+ * 一个 28px 圆形透镜图标按钮。点击优先走**宿主自己的右侧栏**：调用
+ * ctx.sidebarRight.openTab('token-lens')，由内核把右侧栏拉开并切到我们的页签
+ * —— 走官方组件，不存在自定义浮层被包含块/层叠藏起来的可能。
+ * 仅当宿主没有该服务时，才退回本文件的命令式悬浮卡片。 */
+
+/** 停靠式打开器（由 index.ts 在 sidebarRight 服务就位时注入）。返回 true 表示已接管。 */
+let dockedOpener: (() => boolean) | null = null
+
+/** 注册/注销停靠式打开器（index.ts 调用；插件卸载时传 null 复位）。 */
+export function setDockedOpener(fn: (() => boolean) | null): void {
+  dockedOpener = fn
+}
+
+/** 头部按钮点击：先试宿主右侧栏，失败再退悬浮卡片。 */
+function openLensEntry(): void {
+  if (dockedOpener !== null) {
+    try {
+      if (dockedOpener()) return
+    } catch (error) {
+      console.warn('[token-lens] 打开右侧栏失败，退回悬浮卡片：', error)
+    }
+  }
+  toggleLensOverlay()
+}
+
 export function TokenLensHeaderAction(): JSX.Element {
   return (
     <button
@@ -76,7 +99,7 @@ export function TokenLensHeaderAction(): JSX.Element {
       className="tl-header-action"
       onClick={(e) => {
         e.stopPropagation()
-        toggleLensOverlay()
+        openLensEntry()
       }}
       title="Token Lens · 全部会话的 token 用量统计"
       aria-label="Token Lens"
@@ -104,11 +127,14 @@ export function TokenLensChip(props: { useTabInfo?: () => { tab?: { title?: stri
   )
 }
 
+/** 内建右侧栏页签的类型标识（宿主 openTab(kind) 用它寻址）。 */
+export const BUILTIN_TAB_KIND = 'token-lens'
+
 /** 内建右侧栏的页签类型定义（guide = 右侧栏引导胶囊/「+」菜单里的入口）。 */
 export function builtinTabDefinition(): Record<string, unknown> {
   return {
     id: 'dsh-token-lens',
-    kind: 'token-lens',
+    kind: BUILTIN_TAB_KIND,
     title: () => 'Token Lens',
     guide: [
       {

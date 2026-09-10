@@ -77,6 +77,8 @@ export interface SummaryView {
     turns: number
   }>
   partial: { skippedCount: number; skippedSessionIds: string[]; reasons: string[] }
+  /** true = 宿主返回的是「已落盘索引」的即时视图，后台仍在重建 → 客户端稍后自动重取 */
+  stale?: boolean
 }
 
 export interface ModelRow {
