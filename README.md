@@ -34,7 +34,7 @@ A token usage analytics panel for **DSH (DeepSeek Harness)** — living in your 
 
 ![宽态两列](docs/screenshots/panel-wide-dark.png)
 
-> 截图与演示均为**虚构示例数据**。想亲手玩：克隆仓库后用浏览器打开 [`docs/demo.html`](docs/demo.html)。
+> 截图与演示均为**虚构示例数据**（上面三张图即由 [`docs/demo.html`](docs/demo.html) 直接渲染）。想亲手玩：克隆仓库后用浏览器打开它。
 
 ## 📦 Installation
 
