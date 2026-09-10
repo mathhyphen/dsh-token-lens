@@ -1,18 +1,29 @@
 /**
- * @dsh-external/dsh-token-lens — client 入口（v0.2.0：better-sidebar 标签页形态）。
+ * @dsh-external/dsh-token-lens — client 入口。
  *
- * 入口设计（2026-08-23 二次调整，对齐 DeepTrace）：统计是全局视图，入口与
- * 终端/浏览器/深迹(DeepTrace) 同列 —— 注册进 dsh-better-sidebar 标签系统：
- *   ctx.inject(['betterSidebar'], (injected) => service.registerTab({...}))
- * 契约来源：dsh-better-sidebar lib/types/client/service.d.ts（TabDescriptor /
- * TabComponentProps），生产先例 dsh-whale-report lib/client.js（id 深迹:report、
- * order 90、single:true、component 返回面板组件）。
- * 兜底：better-sidebar 服务不可用时自动退回 sidebar.footer.action 按钮 +
- * createRoot 命令式全屏悬浮层；标签注册成功即撤掉兜底按钮。
- * 本文件保持纯 TS（tsdown 入口固定 src/client/index.ts）；JSX 在 entry.tsx。
+ * 入口演进：
+ *  - v0.2.0：better-sidebar 标签页（ctx.inject(['betterSidebar']) → registerTab）。
+ *  - v0.3.3（2026-09-10）：DSH 0.1.5 把右侧栏收进内核并移除了第三方
+ *    dsh-better-sidebar，插件因此退化到左侧栏兜底按钮（正好压在「设置」上面）。
+ *    现改为优先注册进内核右侧栏：
+ *      ctx.inject(['sidebarRightTabs']) → registry.register({id, kind, title, guide})
+ *      + 槽位 sidebar.right.pane.tab / sidebar.right.pane.tab.title（key = definition.id）
+ *    契约来源：@deepseek-ai/dsh-client-ui-sidebar-right 与内置生产者
+ *    dsh-client-ui-sidebar-files（filesDefinition / FilesBody / FilesTitle）。
+ *  兜底链：内建右侧栏 → better-sidebar（老版本 DSH）→ sidebar.footer.action 按钮。
+ *  本文件保持纯 TS（tsdown 入口固定 src/client/index.ts）；JSX 在 entry.tsx。
  */
 import type { SlotsService } from '@deepseek-ai/dsh-client-ui-slots'
-import { LensEntry, closeLensOverlay, isLensTabRegistered, registerLensTab, setLensTabRegistered } from './entry'
+import {
+  LensEntry,
+  TokenLensChip,
+  TokenLensTab,
+  builtinTabDefinition,
+  closeLensOverlay,
+  isLensTabRegistered,
+  registerLensTab,
+  setLensTabRegistered,
+} from './entry'
 import { PANEL_CSS } from './theme'
 
 type ClientContext = {
@@ -20,6 +31,16 @@ type ClientContext = {
   inject: (services: string[], cb: (injected: Record<string, unknown>) => void) => void
   effect: (fn: () => unknown, tag?: string) => unknown
 }
+
+/** DSH 0.1.5+ 内建右侧栏的页签注册表（ctx.sidebarRightTabs）。 */
+type RightTabRegistry = { register: (definition: Record<string, unknown>) => unknown }
+
+/** 页签正文/标题槽位的 entryKey（= definition.id）。 */
+const BUILTIN_TAB_ID = 'dsh-token-lens'
+
+/** 新槽位名不在 dsh-client-ui-slots 的类型表里，注册/注入走宽松签名。 */
+type LooseRegister = (spec: Record<string, unknown>, component: unknown) => unknown
+type LooseInject = (key: string, cb: () => unknown) => unknown
 
 export const inject = ['slots']
 
@@ -88,7 +109,62 @@ export function apply(ctx: ClientContext): void {
     'dsh-token-lens: footer fallback',
   )
 
-  // 主入口：better-sidebar 标签页（与终端/浏览器/深迹同列）
+  // 主入口 A（DSH 0.1.5+）：内核右侧栏页签
+  const tryRegisterBuiltinTab = (registry: RightTabRegistry): Disposable | null => {
+    const steps: Array<() => void> = []
+    // 注意：slots 的方法内部用 this.ctx，摘下来必须绑定，否则 "Cannot read properties of undefined (reading 'ctx')"
+    const register = (ctx.slots.register as unknown as LooseRegister).bind(ctx.slots) as LooseRegister
+    const injectSlot = (ctx.slots.inject as unknown as LooseInject).bind(ctx.slots) as LooseInject
+    const push = (raw: unknown): void => {
+      const d = asDisposer(raw)
+      if (d !== null) steps.push(() => d.dispose())
+    }
+    try {
+      push(registry.register(builtinTabDefinition()))
+      push(
+        injectSlot('sidebar.right.pane.tab', () =>
+          register({ name: 'sidebar.right.pane.tab', key: BUILTIN_TAB_ID }, TokenLensTab),
+        ),
+      )
+      push(
+        injectSlot('sidebar.right.pane.tab.title', () =>
+          register({ name: 'sidebar.right.pane.tab.title', key: BUILTIN_TAB_ID }, TokenLensChip),
+        ),
+      )
+    } catch (error) {
+      for (const step of steps) {
+        try {
+          step()
+        } catch {
+          /* 回滚尽力而为 */
+        }
+      }
+      console.error('[token-lens] 内建右侧栏页签注册失败，保留兜底入口：', error)
+      return null
+    }
+    setLensTabRegistered(true)
+    console.info('[token-lens] 已注册进内核右侧栏（sidebarRightTabs）')
+    return { dispose: (): void => { for (const step of steps) step() } }
+  }
+
+  ctx.inject(['sidebarRightTabs'], (injected) => {
+    const registry = injected.sidebarRightTabs as RightTabRegistry | undefined
+    if (registry === undefined || tabRegistered) return
+    tabRegistered = true
+    ctx.effect(() => {
+      const disposer = tryRegisterBuiltinTab(registry)
+      if (isLensTabRegistered()) {
+        footerDisposer?.dispose()
+        footerDisposer = null
+      }
+      return combine(
+        () => disposer?.dispose(),
+        () => closeLensOverlay(),
+      )
+    }, 'dsh-token-lens: builtin right sidebar tab')
+  })
+
+  // 主入口 B（旧版 DSH）：better-sidebar 标签页
   type TabService = {
     registerTab: (descriptor: Record<string, unknown>) => unknown
     /** v0.18.0 起可用：查已注册标签（重复注册判定用；缺省则退化为普通失败） */

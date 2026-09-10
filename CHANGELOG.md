@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.3 — 2026-09-10
+
+- 适配 DSH 0.1.5：右侧栏收进内核、第三方 `dsh-better-sidebar` 被移除，插件此前
+  退化到左侧栏兜底按钮（正好压在「设置」上面）。现优先注册进**内核右侧栏**：
+  `ctx.inject(['sidebarRightTabs']) → registry.register({id, kind, title, guide})`
+  + 槽位 `sidebar.right.pane.tab` / `sidebar.right.pane.tab.title`（entryKey = definition.id，
+  契约对齐内置生产者 `dsh-client-ui-sidebar-files`）。用户从右侧栏引导胶囊点开。
+- 入口兜底链：内核右侧栏（0.1.5+）→ better-sidebar（旧版 DSH）→ `sidebar.footer.action` 按钮。
+- 修复：`ctx.slots.register/inject` 摘下来调用丢 `this`（`Cannot read properties of
+  undefined (reading 'ctx')`）——改为绑定调用。
+
 ## 0.3.2 — 2026-09-08
 
 - 修复：左侧边栏底部常驻「Token Lens」按钮（入口位置错乱）——兜底入口

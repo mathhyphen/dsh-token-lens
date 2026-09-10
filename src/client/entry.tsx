@@ -66,6 +66,41 @@ export function TokenLensTab(): JSX.Element {
   return <TokenLensPanel />
 }
 
+/* ── DSH 0.1.5+ 内建右侧栏（ui-sidebar-right）─────────────────────────────
+ * 契约：`ctx.sidebarRightTabs.register({ id, kind, title, guide })` 定义页签类型；
+ * 正文注册进槽位 `sidebar.right.pane.tab`、标题芯片注册进
+ * `sidebar.right.pane.tab.title`，两者的 entryKey 都是 definition.id。
+ * 用户从右侧栏的引导胶囊（guide 条目）点开 → openTab(kind)。
+ * ──────────────────────────────────────────────────────────────────────── */
+
+/** 页签标题芯片：图标 + 标题（标题来自宿主 hookContext 的 useTabInfo）。 */
+export function TokenLensChip(props: { useTabInfo?: () => { tab?: { title?: string } } }): JSX.Element {
+  const title = props.useTabInfo?.()?.tab?.title ?? 'Token Lens'
+  return (
+    <>
+      <LensIcon size={16} />
+      {title}
+    </>
+  )
+}
+
+/** 内建右侧栏的页签类型定义（guide = 右侧栏引导胶囊/「+」菜单里的入口）。 */
+export function builtinTabDefinition(): Record<string, unknown> {
+  return {
+    id: 'dsh-token-lens',
+    kind: 'token-lens',
+    title: () => 'Token Lens',
+    guide: [
+      {
+        order: 92,
+        title: () => 'Token Lens',
+        description: () => '全部会话的 token 用量统计',
+        icon: (props: { size?: number }) => <LensIcon size={props?.size ?? 16} />,
+      },
+    ],
+  }
+}
+
 type TabService = { registerTab: (descriptor: Record<string, unknown>) => unknown }
 type Disposable = { dispose: () => void }
 
