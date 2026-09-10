@@ -17,6 +17,7 @@ import type { SlotsService } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   LensEntry,
   TokenLensChip,
+  TokenLensHeaderAction,
   TokenLensTab,
   builtinTabDefinition,
   closeLensOverlay,
@@ -81,6 +82,27 @@ export function apply(ctx: ClientContext): void {
 
   let footerDisposer: Disposable | null = null
   let tabRegistered = false
+
+  // 正规入口一（官方槽位）：会话头部动作按钮 —— 位置随会话标题栏，点开悬浮卡片
+  ctx.effect(
+    () =>
+      ctx.slots.inject('conversation.session.header.actions', () => {
+        const disposable = ctx.slots.register(
+          {
+            name: 'conversation.session.header.actions',
+            id: 'token-lens',
+            order: 90,
+          },
+          TokenLensHeaderAction,
+        )
+        // 头部入口就位 → 兜底按钮退场（状态位同时让兜底组件渲染 null，顺序无关）
+        setLensTabRegistered(true)
+        footerDisposer?.dispose()
+        footerDisposer = null
+        return disposable
+      }),
+    'dsh-token-lens: header action (floating card)',
+  )
 
   // 兜底入口：better-sidebar 不在时依然可用（标签就位后由 LensEntry 自行渲染 null）
   ctx.effect(

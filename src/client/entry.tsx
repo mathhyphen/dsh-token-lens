@@ -66,6 +66,26 @@ export function TokenLensTab(): JSX.Element {
   return <TokenLensPanel />
 }
 
+/* ── 会话头部入口（官方槽位 conversation.session.header.actions）──
+ * 一个 28px 圆形图标按钮，点开/收起悬浮卡片（悬浮层由本文件的命令式实现承载：
+ * esc / 点遮罩关闭）。位置随会话标题栏，属于宿主给插件预留的正规座位。 */
+export function TokenLensHeaderAction(): JSX.Element {
+  return (
+    <button
+      type="button"
+      className="tl-header-action"
+      onClick={(e) => {
+        e.stopPropagation()
+        toggleLensOverlay()
+      }}
+      title="Token Lens · 全部会话的 token 用量统计"
+      aria-label="Token Lens"
+    >
+      <LensIcon size={16} />
+    </button>
+  )
+}
+
 /* ── DSH 0.1.5+ 内建右侧栏（ui-sidebar-right）─────────────────────────────
  * 契约：`ctx.sidebarRightTabs.register({ id, kind, title, guide })` 定义页签类型；
  * 正文注册进槽位 `sidebar.right.pane.tab`、标题芯片注册进

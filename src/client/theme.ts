@@ -177,4 +177,50 @@ export const PANEL_CSS = `
   .tl-cols { display: grid; grid-template-columns: 11fr 9fr; gap: 10px; align-items: start; }
   .tl-colv { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 }
+
+/* ── 会话头部入口按钮（官方槽位 conversation.session.header.actions）──
+   这类元素挂在宿主头部/body 上，不在 .tl-root 里，故直接用 --dsw-alias-*。 */
+.tl-header-action {
+  width: 28px; height: 28px; padding: 0; border: none; border-radius: 50%;
+  background: transparent; color: var(--dsw-alias-label-secondary, #9aa7b4);
+  cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+}
+.tl-header-action:hover {
+  background: var(--dsw-alias-interactive-bg-hover, rgba(154, 167, 180, .10));
+  color: var(--dsw-alias-label-primary, #e8edf2);
+}
+.tl-header-action:focus-visible { outline-offset: 1px; }
+
+/* ── 悬浮卡片（头部入口 / 兜底入口共用）── */
+.tl-overlay {
+  position: fixed; inset: 0; z-index: 2147000000;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 6vh 24px 24px; background: rgba(12, 15, 20, .42);
+}
+.tl-modal {
+  position: relative; width: min(980px, 100%); max-height: 86vh; overflow: auto;
+  padding: 16px 18px 20px; border-radius: 18px;
+  background: var(--dsw-alias-bg-layer-1, #101418);
+  border: 1px solid var(--dsw-alias-border-l2, rgba(154, 167, 180, .14));
+  box-shadow: 0 24px 64px rgba(0, 0, 0, .30);
+}
+.tl-close {
+  position: absolute; top: 10px; right: 12px; width: 28px; height: 28px;
+  padding: 0; border: none; border-radius: 50%; background: transparent;
+  color: var(--dsw-alias-label-secondary, #9aa7b4); font-size: 18px; line-height: 1; cursor: pointer;
+}
+.tl-close:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(154, 167, 180, .10)); }
+
+/* ── 兜底入口按钮（仅宿主既无头部槽位、也无任何标签系统时出现）── */
+.tl-entry {
+  display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px;
+  border: none; border-radius: 8px; background: transparent; font: inherit; font-size: 12px;
+  color: var(--dsw-alias-label-secondary, #9aa7b4); cursor: pointer;
+}
+.tl-entry:hover {
+  background: var(--dsw-alias-interactive-bg-hover, rgba(154, 167, 180, .10));
+  color: var(--dsw-alias-label-primary, #e8edf2);
+}
+.tl-entry-wide { width: 100%; justify-content: flex-start; }
+.tl-entry-icon { font-size: 14px; line-height: 1; }
 `

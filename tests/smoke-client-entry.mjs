@@ -85,12 +85,15 @@ function captureConsole() {
  * 最小 ctx 桩。deferSlot=true 模拟「footer 槽位声明晚于标签注册」的时序。
  * service 为 betterSidebar 桩（registerTab / getTab 行为由场景给定）。
  */
-function makeCtx({ service, deferSlot }) {
-  const log = { slotsRegistered: [], footerDisposed: 0 }
+function makeCtx({ service, deferSlot, headerSlot = true }) {
+  const log = { slotsRegistered: [], disposed: [] }
   let pendingSlotCallback = null
   const slots = {
-    inject(_key, callback) {
-      if (deferSlot) {
+    inject(key, callback) {
+      // headerSlot=false：模拟宿主没有会话头部槽位（此时兜底链才轮到 footer）
+      if (key === 'conversation.session.header.actions' && !headerSlot) return () => {}
+      // 只延迟兜底槽位（sidebar.footer.action）的声明——模拟「footer 声明晚于标签注册」
+      if (deferSlot && key === 'sidebar.footer.action') {
         pendingSlotCallback = callback
         return () => {}
       }
@@ -98,12 +101,12 @@ function makeCtx({ service, deferSlot }) {
       return () => {}
     },
     register(spec, component) {
-      log.slotsRegistered.push({ spec, component })
-      let disposed = false
+      const record = { spec, component, disposed: false }
+      log.slotsRegistered.push(record)
       const dispose = () => {
-        if (disposed) return
-        disposed = true
-        log.footerDisposed += 1
+        if (record.disposed) return
+        record.disposed = true
+        log.disposed.push(spec.name)
       }
       dispose.dispose = dispose
       return dispose
@@ -134,22 +137,28 @@ function makeCtx({ service, deferSlot }) {
 
 installDom()
 
-/** 从注册记录里取兜底组件并渲染一次（bundle 不导出 LensEntry，只能经 slots.register 拿）。 */
+/** 兜底槽位的注册记录（0.3.3 起还有头部入口槽位，断言必须按槽位过滤）。 */
+const FOOTER = 'sidebar.footer.action'
+const HEADER = 'conversation.session.header.actions'
+const footerRegs = (log) => log.slotsRegistered.filter((r) => r.spec.name === FOOTER)
+const headerRegs = (log) => log.slotsRegistered.filter((r) => r.spec.name === HEADER)
+const footerDisposed = (log) => log.disposed.filter((n) => n === FOOTER).length
+
+/** 渲染兜底组件一次（bundle 不导出 LensEntry，只能经 slots.register 拿）。 */
 function renderFooter(log) {
-  const first = log.slotsRegistered[0]
+  const first = footerRegs(log)[0]
   return first === undefined ? undefined : first.component({ wide: true })
 }
 
-/* ── A 正常：标签注册成功 → 兜底注册被撤 + 兜底组件渲染 null ── */
+/* ── A 正常（宿主无头部槽位）：标签注册成功 → 兜底注册被撤 + 兜底组件渲染 null ── */
 {
   const cap = captureConsole()
   const mod = loadBundle()
-  const { ctx, log } = makeCtx({ service: { registerTab: () => () => {} }, deferSlot: false })
+  const { ctx, log } = makeCtx({ service: { registerTab: () => () => {} }, deferSlot: false, headerSlot: false })
   mod.apply(ctx)
   const entry = renderFooter(log)
   cap.restore()
-  check('A 正常：兜底注册过一次', log.slotsRegistered.length === 1, `registered=${log.slotsRegistered.length}`)
-  check('A 正常：标签就位后兜底被撤', log.footerDisposed === 1, `disposed=${log.footerDisposed}`)
+  check('A 正常：兜底注册过且被撤', footerRegs(log).length === 1 && footerDisposed(log) === 1, `footers=${footerRegs(log).length} disposed=${footerDisposed(log)}`)
   check('A 正常：兜底组件渲染 null', entry === null, `entry=${entry === null ? 'null' : typeof entry}`)
 }
 
@@ -157,41 +166,56 @@ function renderFooter(log) {
 {
   const cap = captureConsole()
   const mod = loadBundle()
-  const { ctx, log, runDeferredSlot } = makeCtx({ service: { registerTab: () => () => {} }, deferSlot: true })
+  const { ctx, log, runDeferredSlot } = makeCtx({ service: { registerTab: () => () => {} }, deferSlot: true, headerSlot: false })
   mod.apply(ctx)
   runDeferredSlot() // 槽位现在才声明
   cap.restore()
-  check('B 竞态：兜底不再注册', log.slotsRegistered.length === 0, `registered=${log.slotsRegistered.length}`)
+  check('B 竞态：兜底不再注册', footerRegs(log).length === 0, `footers=${footerRegs(log).length}`)
 }
 
-/* ── C 重复注册（同 id 已在册）→ 视为就位，兜底被撤 ── */
+/* ── B2 宿主机有头部槽位：头部入口就位 → 兜底永不注册 ── */
+{
+  const cap = captureConsole()
+  const mod = loadBundle()
+  const { ctx, log } = makeCtx({ service: { registerTab: () => () => {} }, deferSlot: false, headerSlot: true })
+  mod.apply(ctx)
+  const headerEntry = headerRegs(log)[0]?.component()
+  const entry = renderFooter(log)
+  cap.restore()
+  check('B2 头部：头部入口已注册', headerRegs(log).length === 1, `header=${headerRegs(log).length}`)
+  check('B2 头部：兜底永不注册', footerRegs(log).length === 0, `footers=${footerRegs(log).length}`)
+  check('B2 头部：头部入口渲染按钮', headerEntry !== null && headerEntry !== undefined, 'header=null')
+  check('B2 头部：无兜底组件可渲染', entry === undefined, `entry=${typeof entry}`)
+}
+
+/* ── C 重复注册（同 id 已在册，宿主无头部槽位）→ 视为就位，兜底被撤 ── */
 {
   const cap = captureConsole()
   const mod = loadBundle()
   const duplicate = new Error('[dsh-better-sidebar] tab type "dsh-token-lens" already registered')
   const service = { registerTab: () => { throw duplicate }, getTab: () => ({ id: 'dsh-token-lens' }) }
-  const { ctx, log } = makeCtx({ service, deferSlot: false })
+  const { ctx, log } = makeCtx({ service, deferSlot: false, headerSlot: false })
   mod.apply(ctx)
   const entry = renderFooter(log)
   const warned = cap.seen.warn.some((line) => line.includes('标签已存在'))
   const errors = cap.seen.error.length
   cap.restore()
-  check('C 重复：兜底被撤', log.footerDisposed === 1, `disposed=${log.footerDisposed}`)
+  check('C 重复：兜底被撤', footerDisposed(log) === 1, `disposed=${footerDisposed(log)}`)
   check('C 重复：兜底组件渲染 null', entry === null, `entry=${entry === null ? 'null' : typeof entry}`)
   check('C 重复：打了 warn 而非 error', warned && errors === 0, `warn=${warned} error=${errors}`)
 }
 
-/* ── D 真失败 → 保留兜底（按钮仍可用）并报错 ── */
+/* ── D 真失败（宿主无头部槽位）→ 兜底保留并报错 ── */
 {
   const cap = captureConsole()
   const mod = loadBundle()
   const service = { registerTab: () => { throw new Error('boom') }, getTab: () => undefined }
-  const { ctx, log } = makeCtx({ service, deferSlot: false })
+  const { ctx, log } = makeCtx({ service, deferSlot: false, headerSlot: false })
   mod.apply(ctx)
   const entry = renderFooter(log)
   const errored = cap.seen.error.some((line) => line.includes('标签注册失败'))
   cap.restore()
-  check('D 失败：兜底保留（未撤）', log.footerDisposed === 0, `disposed=${log.footerDisposed}`)
+  check('D 失败：兜底保留（未撤）', footerDisposed(log) === 0, `disposed=${footerDisposed(log)}`)
   check('D 失败：兜底组件仍渲染按钮', entry !== null && entry !== undefined, 'entry=null')
   check('D 失败：打了 console.error', errored, `errors=${cap.seen.error.length}`)
 }
