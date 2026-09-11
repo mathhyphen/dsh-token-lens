@@ -53,6 +53,10 @@ export function TokenLensPanel(_props: unknown): JSX.Element {
   const [entry, setEntry] = useState<Entry | undefined>(() => cacheRef.current['day'])
   const [net, setNet] = useState<'loading' | 'ok' | 'error'>('loading')
   const [errMsg, setErrMsg] = useState<string>('')
+  /** true = 宿主正在重建索引（本次刷新还没跑完）→ 头部显示「更新中…」+ 琥珀点 */
+  const [updating, setUpdating] = useState(false)
+  /** 首次挂载标志：挂载那次强制刷新，之后切粒度走被动读（同一份索引，无需重建） */
+  const firstLoad = useRef(true)
 
   const refresh = useCallback(
     async (gran: Granularity, opts: { quiet?: boolean; force?: boolean } = {}) => {
@@ -75,6 +79,7 @@ export function TokenLensPanel(_props: unknown): JSX.Element {
         //    只看 stale 会误判为"已完成"→ 用户永远看不到新数字）
         const pendingRebuild = summary.stale === true || summary.refresh?.inFlight === true
         stalePending.current = pendingRebuild
+        setUpdating(pendingRebuild)
         if (!pendingRebuild) {
           staleTries.current = 0
           return
@@ -129,7 +134,17 @@ export function TokenLensPanel(_props: unknown): JSX.Element {
     [],
   )
 
+  // 取数时机（刻意做到"只在需要时干活"）：
+  //  - 打开面板：强制刷新一次（force，受宿主 20s 最小重建间隔保护）
+  //  - 切粒度：被动读（同一份索引，换个聚合口径而已，不必重建）
+  //  - 手动 ⟳ / 重试：force
+  //  - 其余时间零请求（重建没跑完时由退避重取等待，见 refresh）
   useEffect(() => {
+    if (firstLoad.current) {
+      firstLoad.current = false
+      void refresh(g, { force: true })
+      return
+    }
     void refresh(g)
   }, [g, refresh])
 
@@ -151,7 +166,7 @@ export function TokenLensPanel(_props: unknown): JSX.Element {
     periodDeltaPct = Math.round(((curBucket.tokens.total - prevBucket.tokens.total) / prevBucket.tokens.total) * 1000) / 10
   }
 
-  const stale = net === 'loading' && entry !== undefined // 正在拉新但还有旧数据可看
+  const stale = (net === 'loading' && entry !== undefined) || updating // 有旧数据可看 + 新数据在路上
   const age = entry ? fmtAge(entry.at) : ''
   const dotCls = net === 'error' ? 'err' : stale ? 'stale' : ''
 
@@ -179,7 +194,7 @@ export function TokenLensPanel(_props: unknown): JSX.Element {
             <span className={`tl-dot ${dotCls}`} />
             <span>
               {entry?.summary && net !== 'error'
-                ? `数据截止 ${fmtDateTime(entry.summary.cutoff)} · ${age}`
+                ? `数据截止 ${fmtDateTime(entry.summary.cutoff)} · ${age}${updating ? ' · 更新中…' : ''}`
                 : net === 'loading'
                   ? '加载中…'
                   : '暂无数据'}
