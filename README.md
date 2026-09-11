@@ -111,7 +111,8 @@ DSH 会话存档（~/.dsh/sessions/*）
    ▼
 增量缓存 src/store.ts + collect.ts
    ~/.dsh/storages/token-lens.json（原子写 + 结构版本 + 截止时间戳）
-   TTL 10min 索引复用 · live 内存覆盖层 · 失败隔离 partial 披露 · 启动预热 + 单飞锁
+   TTL 30min 索引复用 · live 内存覆盖层 · 失败隔离 partial 披露 · 启动预热 + 单飞锁
+   （被动读 10min 新鲜窗口；⟳ / force 立即重建，受 20s 最小间隔保护）
    ▼
 HTTP API src/api.ts ──► Web 面板 src/client/*（better-sidebar 标签页）
                     └─► agent 工具 token_usage（src/tool.ts）

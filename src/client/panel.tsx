@@ -69,9 +69,13 @@ export function TokenLensPanel(_props: unknown): JSX.Element {
         saveCache(next)
         setEntry(next[gran])
         setNet('ok')
-        // stale：宿主还在后台重建索引（会话多/日志大时可能几分钟）→ 退避重取，直到拿到非 stale
-        stalePending.current = summary.stale === true
-        if (summary.stale !== true) {
+        // 两种情况都要继续退避重取：
+        //  - stale：本次是「已落盘索引」的即时视图（重建在跑）
+        //  - refresh.inFlight：按了 ⟳ 之后重建还没跑完（此时被动读会返回窗口内的旧数据，
+        //    只看 stale 会误判为"已完成"→ 用户永远看不到新数字）
+        const pendingRebuild = summary.stale === true || summary.refresh?.inFlight === true
+        stalePending.current = pendingRebuild
+        if (!pendingRebuild) {
           staleTries.current = 0
           return
         }

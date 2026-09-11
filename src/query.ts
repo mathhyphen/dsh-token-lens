@@ -111,7 +111,14 @@ export interface SummaryPayload {
   partial: PartialInfo
   /** true = 本次是「已落盘索引」的即时视图（宿主后台仍在重建索引） */
   stale: boolean
-  refresh: { durationMs: number; freshWindowMs: number; indexTtlMs: number }
+  refresh: {
+    durationMs: number
+    freshWindowMs: number
+    indexTtlMs: number
+    lastError: string | null
+    /** true = 此刻有重建在跑（客户端据此继续退避重取，直到拿到新数据） */
+    inFlight: boolean
+  }
 }
 
 export interface SummaryParams {
@@ -211,7 +218,13 @@ export async function buildSummary(svc: LensServices, params: SummaryParams): Pr
     partial: outcome.partial,
     /** true = 这是「已落盘索引」的即时视图，后台仍在重建（计数可能不是最新） */
     stale: outcome.stale === true,
-    refresh: { durationMs: outcome.durationMs, freshWindowMs: FRESH_MS, indexTtlMs: INDEX_TTL_MS },
+    refresh: {
+      durationMs: outcome.durationMs,
+      freshWindowMs: FRESH_MS,
+      indexTtlMs: INDEX_TTL_MS,
+      lastError: svc.lastError,
+      inFlight: svc.refreshing !== null,
+    },
   }
 }
 

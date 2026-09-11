@@ -79,6 +79,14 @@ export interface SummaryView {
   partial: { skippedCount: number; skippedSessionIds: string[]; reasons: string[] }
   /** true = 宿主返回的是「已落盘索引」的即时视图，后台仍在重建 → 客户端稍后自动重取 */
   stale?: boolean
+  /** 宿主侧刷新状态：inFlight=true 表示此刻有重建在跑 */
+  refresh?: {
+    durationMs?: number
+    freshWindowMs?: number
+    indexTtlMs?: number
+    lastError?: string | null
+    inFlight?: boolean
+  }
 }
 
 export interface ModelRow {

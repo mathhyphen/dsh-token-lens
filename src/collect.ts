@@ -20,17 +20,23 @@ import type {
 import { SCHEMA_VERSION, type TokenLensStore } from './store.js'
 import { bucketizeSession } from './engine.js'
 
-/** 单会话索引复用窗口：窗口内直接用缓存明细，过期才重读完整日志 */
-export const INDEX_TTL_MS = 10 * 60 * 1000
+/**
+ * 单会话索引复用窗口：窗口内直接用缓存明细，过期才重读完整日志。
+ *
+ * 2026-09-11：10min → 30 分钟。它必须**明显长于** FRESH_MS，否则每次重建都会发现
+ * 上一次重建留下的索引刚好过期 → 退化成"每次都全量重读"（这正是重建要跑 50~110s
+ * 的主因）。30min = 覆盖最近 2~3 轮重建，只有更老的会话才重读。
+ */
+export const INDEX_TTL_MS = 30 * 60 * 1000
 /**
  * 被动读取的新鲜度窗口：窗口内直接复用上次结果。
  *
- * 2026-09-11：60s → 5 分钟。原值 60s 意味着**任何一次读接口**（面板打开、客户端
- * 重取、token_usage 工具）在 60 秒后就触发一次全量重建索引；而一次重建在会话多的
- * 机器上要跑 50~110 秒 → 实际表现是"一直在重建索引"。统计面板不是实时监控，
- * 5 分钟窗口足够；要即时数据按 ⟳（走 force）。
+ * 2026-09-11：60s → 10 分钟。原值 60s 意味着**任何一次读接口**（面板打开、客户端
+ * 重取、token_usage 工具）在 60 秒后就触发一次全量重建索引；而一次重建在会话多、
+ * 日志大的机器上要跑 50~110 秒 → 实际表现是"一直在重建索引"。统计面板不是实时监控，
+ * 10 分钟窗口足够；要即时数据按 ⟳（走 force）。
  */
-export const FRESH_MS = 5 * 60 * 1000
+export const FRESH_MS = 10 * 60 * 1000
 /** 两次重建之间的最小间隔：即使 force 也不得更密（防连点 ⟳ 反复触发全量）。 */
 export const REINDEX_FLOOR_MS = 20 * 1000
 /** 并发读取上限（whale 实测值：12 是吞吐与 IO 压力的平衡点） */
@@ -102,6 +108,8 @@ export interface LensServices {
   last: RefreshOutcome | null
   /** 进行中的 refresh promise（单飞锁） */
   refreshing: Promise<RefreshOutcome> | null
+  /** 最近一次 refresh 的失败原因（成功即清空）——静默吞错会让"⟳ 点了没用"无法诊断 */
+  lastError: string | null
   log(message: string): void
 }
 
@@ -111,6 +119,7 @@ export function createServices(sessionQuery: SessionQueryLike, store: TokenLensS
     store,
     last: null,
     refreshing: null,
+    lastError: null,
     log(message: string) {
       try {
         console.log(`[dsh-token-lens] ${message}`)
@@ -193,6 +202,7 @@ async function refreshOnce(svc: LensServices): Promise<RefreshOutcome> {
     listedCount: records.length,
   }
   svc.last = outcome
+  svc.lastError = null
   if (skippedCount > 0) {
     svc.log(`refresh 完成：${outcome.persisted.length} 持久化 + ${outcome.live.length} live，跳过 ${skippedCount}（${[...reasons].join('/')}）`)
   } else {
@@ -252,13 +262,25 @@ export async function ensureData(svc: LensServices, options: { force?: boolean }
   if (snapshot === null) return pending // 真·冷启动：没有旧索引可显，只能等
   const settled = await Promise.race([
     pending.then(
-      () => true,
-      () => true,
+      () => 'ok' as const,
+      (error: unknown) => {
+        // 关键：把失败显式记下来（旧实现把"失败"也当成"完成"→ 静默返回旧数据，
+        // 表现就是"⟳ 点了没反应"）
+        svc.lastError = error instanceof Error ? error.message : String(error)
+        svc.log(`refresh 失败：${svc.lastError}`)
+        return 'failed' as const
+      },
     ),
-    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), ENSURE_GRACE_MS)),
+    new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), ENSURE_GRACE_MS)),
   ])
-  if (settled && svc.last !== null) return svc.last
-  svc.log(`索引仍在后台重建（${snapshot.persisted.length} 条旧索引可用），本次先返回既有索引`)
+  if (settled === 'ok' && svc.last !== null) return svc.last
+  if (settled === 'failed' && svc.last === null) {
+    // 一点数据都没有又失败了：把原因抛给调用方（API 转 400 带 message），不假装成功
+    throw new Error(`索引重建失败：${svc.lastError ?? '未知原因'}`)
+  }
+  if (settled === 'timeout') {
+    svc.log(`索引仍在后台重建（${snapshot.persisted.length} 条旧索引可用），本次先返回既有索引`)
+  }
   return snapshot
 }
 
