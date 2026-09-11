@@ -22,8 +22,17 @@ import { bucketizeSession } from './engine.js'
 
 /** 单会话索引复用窗口：窗口内直接用缓存明细，过期才重读完整日志 */
 export const INDEX_TTL_MS = 10 * 60 * 1000
-/** API/工具侧的数据新鲜度：距上次 refresh 超过该窗口才重新采集 */
-export const FRESH_MS = 60 * 1000
+/**
+ * 被动读取的新鲜度窗口：窗口内直接复用上次结果。
+ *
+ * 2026-09-11：60s → 5 分钟。原值 60s 意味着**任何一次读接口**（面板打开、客户端
+ * 重取、token_usage 工具）在 60 秒后就触发一次全量重建索引；而一次重建在会话多的
+ * 机器上要跑 50~110 秒 → 实际表现是"一直在重建索引"。统计面板不是实时监控，
+ * 5 分钟窗口足够；要即时数据按 ⟳（走 force）。
+ */
+export const FRESH_MS = 5 * 60 * 1000
+/** 两次重建之间的最小间隔：即使 force 也不得更密（防连点 ⟳ 反复触发全量）。 */
+export const REINDEX_FLOOR_MS = 20 * 1000
 /** 并发读取上限（whale 实测值：12 是吞吐与 IO 压力的平衡点） */
 const READ_CONCURRENCY = 12
 /** partial 披露的 id 上限（有界披露原则） */
@@ -221,15 +230,20 @@ const ENSURE_GRACE_MS = 1500
 
 /**
  * 取当前可用数据：
- *  1. 新鲜度窗口内直接复用上次结果；
+ *  1. 新鲜度窗口（FRESH_MS）内直接复用上次结果 —— 被动读不再每次触发重索引；
  *  2. 否则触发 refresh（单飞，并发请求共享同一次采集）；
  *  3. 已有落盘索引时最多等 ENSURE_GRACE_MS —— 超时即用旧索引返回（stale:true），
- *     刷新继续在后台跑，绝不把请求挂死；
+ *     重建继续在后台跑，绝不把请求挂死；
  *  4. 完全没有索引（真·首次）才同步等待这次采集。
+ *
+ * @param options.force 用户显式要求（面板 ⟳）：忽略 FRESH_MS，但仍受 REINDEX_FLOOR_MS 限制。
  */
-export async function ensureData(svc: LensServices): Promise<RefreshOutcome> {
+export async function ensureData(svc: LensServices, options: { force?: boolean } = {}): Promise<RefreshOutcome> {
   const last = svc.last
-  if (last !== null && Date.now() - last.at < FRESH_MS) return last
+  const age = last === null ? Number.POSITIVE_INFINITY : Date.now() - last.at
+  if (age < FRESH_MS && options.force !== true) return last as RefreshOutcome
+  // 刚重建过：即使 force 也不重复跑（防连点 ⟳ / 多客户端同时强制）
+  if (age < REINDEX_FLOOR_MS) return last as RefreshOutcome
   if (svc.refreshing === null) {
     svc.refreshing = startRefresh(svc)
   }

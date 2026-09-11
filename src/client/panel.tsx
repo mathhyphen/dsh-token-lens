@@ -20,10 +20,11 @@ import {
 } from './util'
 import { HeatStrip, HitRateRing, ModelShare, TrendChart } from './charts'
 
-/** stale 响应（宿主后台仍在重建索引）时的自动重取：间隔与次数上限。
- *  会话多、日志大的机器上冷索引可能几分钟，这里让面板自己等到真数据，而不是永远转圈。 */
-const STALE_RETRY_MS = 15000
-const MAX_STALE_TRIES = 16
+/** stale 响应（宿主后台仍在重建索引）时的自动重取：退避间隔与次数上限。
+ *  会话多、日志大的机器上冷索引可能几分钟；退避 + 静默（不把面板打回"加载中"），
+ *  且面板不可见时不轮询 —— 不给观感添"一直在刷新"的错觉。 */
+const STALE_BACKOFF_MS = [5000, 10000, 20000, 40000, 60000]
+const MAX_STALE_TRIES = 8
 
 interface Entry extends CacheEntry {}
 
@@ -41,45 +42,81 @@ function DeltaChip({ pct }: { pct: number | null }): JSX.Element {
 export function TokenLensPanel(_props: unknown): JSX.Element {
   // ── 缓存优先：挂载即用 localStorage 里上一次的数据渲染 ──
   const cacheRef = useRef<CacheMap>(loadCache())
-  /** stale 自动重取的计数与定时器（组件卸载时清掉） */
+  /** stale 自动重取的计数 / 定时器 / 是否还在等后台重建（组件卸载时清掉） */
   const staleTries = useRef(0)
   const staleTimer = useRef<number | null>(null)
+  const stalePending = useRef(false)
+  /** 面板是否位于视口内：不可见就不重取（切走/收起侧栏=零请求） */
+  const visibleRef = useRef(true)
+  const rootRef = useRef<HTMLDivElement | null>(null)
   const [g, setG] = useState<Granularity>('day')
   const [entry, setEntry] = useState<Entry | undefined>(() => cacheRef.current['day'])
   const [net, setNet] = useState<'loading' | 'ok' | 'error'>('loading')
   const [errMsg, setErrMsg] = useState<string>('')
 
   const refresh = useCallback(
-    async (gran: Granularity) => {
-      setNet('loading')
+    async (gran: Granularity, opts: { quiet?: boolean; force?: boolean } = {}) => {
+      const quiet = opts.quiet === true
+      // 静默重取：保留当前画面（不闪"加载中"），只在拿到新数据时替换
+      if (!quiet) setNet('loading')
       setErrMsg('')
       try {
         // 先 summary，再用同一区间拉 models —— 保证两块数据口径一致
-        const summary = await fetchSummary(gran)
-        const modelsRes = await fetchModels(summary.range.from, summary.range.to)
+        const summary = await fetchSummary(gran, opts.force === true)
+        const modelsRes = await fetchModels(summary.range.from, summary.range.to, opts.force === true)
         const next: CacheMap = { ...cacheRef.current, [gran]: { summary, models: modelsRes.models, at: Date.now() } }
         cacheRef.current = next
         saveCache(next)
         setEntry(next[gran])
         setNet('ok')
-        // stale：宿主还在后台重建索引（会话多/日志大时可能几分钟）→ 过一会儿自动再取一次
-        if (summary.stale === true && staleTries.current < MAX_STALE_TRIES) {
-          staleTries.current += 1
-          if (staleTimer.current !== null) clearTimeout(staleTimer.current)
-          staleTimer.current = window.setTimeout(() => {
-            staleTimer.current = null
-            void refresh(gran)
-          }, STALE_RETRY_MS)
-        } else {
+        // stale：宿主还在后台重建索引（会话多/日志大时可能几分钟）→ 退避重取，直到拿到非 stale
+        stalePending.current = summary.stale === true
+        if (summary.stale !== true) {
           staleTries.current = 0
+          return
         }
+        if (staleTries.current >= MAX_STALE_TRIES) {
+          console.warn('[token-lens] 索引重建仍在进行，停止自动重取（可手动点 ⟳）')
+          return
+        }
+        const delay = STALE_BACKOFF_MS[Math.min(staleTries.current, STALE_BACKOFF_MS.length - 1)]
+        staleTries.current += 1
+        if (staleTimer.current !== null) clearTimeout(staleTimer.current)
+        staleTimer.current = window.setTimeout(() => {
+          staleTimer.current = null
+          if (!visibleRef.current) return // 面板不可见：不打扰，等重新可见时补一次
+          void refresh(gran, { quiet: true })
+        }, delay)
       } catch (error) {
+        if (quiet) {
+          // 静默重取失败：保留现有数据，不把面板打成错误态
+          console.warn('[token-lens] 后台重取失败：', error)
+          return
+        }
         setNet('error')
         setErrMsg(error instanceof Error ? error.message : String(error))
       }
     },
     [],
   )
+
+  // 可见性观察：切走/收起时停止重取；重新可见且仍在等索引时补一次静默重取
+  useEffect(() => {
+    const el = rootRef.current
+    if (el === null || typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver((entries) => {
+      const last = entries[entries.length - 1]
+      visibleRef.current = last !== undefined && last.isIntersecting
+      if (!visibleRef.current) return
+      if (staleTimer.current !== null) {
+        clearTimeout(staleTimer.current)
+        staleTimer.current = null
+      }
+      if (stalePending.current) void refresh(g, { quiet: true })
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [g, refresh])
 
   useEffect(
     () => () => {
@@ -129,7 +166,7 @@ export function TokenLensPanel(_props: unknown): JSX.Element {
   const axisIdx = buckets.length > 1 ? [0, Math.floor(buckets.length / 3), Math.floor((buckets.length * 2) / 3), buckets.length - 1] : [0]
 
   return (
-    <div className="tl-root">
+    <div className="tl-root" ref={rootRef}>
       <div className="tl-wrap">
         {/* ── 头部条 ── */}
         <div className="tl-hd">
@@ -148,9 +185,12 @@ export function TokenLensPanel(_props: unknown): JSX.Element {
           <button
             type="button"
             className="tl-iconbtn"
-            onClick={() => void refresh(g)}
+            onClick={() => {
+              staleTries.current = 0
+              void refresh(g, { force: true })
+            }}
             disabled={net === 'loading'}
-            title="重新抓取统计"
+            title="重新抓取统计（立即重建索引）"
           >
             <span className={net === 'loading' ? 'tl-spin' : undefined}>⟳</span>
           </button>

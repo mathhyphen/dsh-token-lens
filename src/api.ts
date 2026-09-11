@@ -106,6 +106,8 @@ export function registerApiRoutes(
                 limit: limitRaw === null ? undefined : Number(limitRaw),
                 from: url.searchParams.get('from'),
                 to: url.searchParams.get('to'),
+                // force=1：用户按了 ⟳，忽略被动新鲜度窗口（仍受重建最小间隔保护）
+                force: url.searchParams.get('force') === '1',
               })
               writeJson(res, 200, summary)
               return
@@ -114,6 +116,7 @@ export function registerApiRoutes(
               const models = await buildModels(svc, {
                 from: url.searchParams.get('from'),
                 to: url.searchParams.get('to'),
+                force: url.searchParams.get('force') === '1',
               })
               writeJson(res, 200, models)
               return

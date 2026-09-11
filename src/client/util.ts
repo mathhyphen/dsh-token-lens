@@ -124,15 +124,15 @@ async function getJson<T>(path: string): Promise<T> {
   return (await res.json()) as T
 }
 
-export function fetchSummary(g: Granularity): Promise<SummaryView> {
-  return getJson<SummaryView>(`/token-lens/api/summary?granularity=${g}&limit=${LIMITS[g]}`)
+export function fetchSummary(g: Granularity, force = false): Promise<SummaryView> {
+  return getJson<SummaryView>(`/token-lens/api/summary?granularity=${g}&limit=${LIMITS[g]}${force ? '&force=1' : ''}`)
 }
 
 /** 用 summary 返回的同一区间拉模型占比，保证两块数据口径一致。
  * from/to 传标准 ISO（encodeURIComponent 防特殊字符）；服务端亦兼容纯数字 epoch。 */
-export function fetchModels(from: number, to: number): Promise<{ models: ModelRow[] }> {
+export function fetchModels(from: number, to: number, force = false): Promise<{ models: ModelRow[] }> {
   const iso = (ms: number): string => encodeURIComponent(new Date(ms).toISOString())
-  return getJson(`/token-lens/api/models?from=${iso(from)}&to=${iso(to)}`)
+  return getJson(`/token-lens/api/models?from=${iso(from)}&to=${iso(to)}${force ? '&force=1' : ''}`)
 }
 
 /** ── 格式化 ── */

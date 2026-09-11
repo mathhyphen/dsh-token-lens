@@ -119,6 +119,8 @@ export interface SummaryParams {
   limit?: number
   from?: string | null
   to?: string | null
+  /** 用户显式要求立刻重建索引（面板 ⟳）；缺省走被动新鲜度窗口 */
+  force?: boolean
 }
 
 /** 各粒度的默认桶数与回看窗口 */
@@ -136,7 +138,7 @@ const GRANULARITY_DEFAULTS: Record<Granularity, { defaultLimit: number; maxLimit
  * limit 只裁剪返回的桶数组，totals/topSessions/stats 始终覆盖全区间。
  */
 export async function buildSummary(svc: LensServices, params: SummaryParams): Promise<SummaryPayload> {
-  const outcome = await ensureData(svc)
+  const outcome = await ensureData(svc, { force: params.force === true })
   const now = Date.now()
   const g = params.granularity
   const defaults = GRANULARITY_DEFAULTS[g]
@@ -223,8 +225,11 @@ export interface ModelsPayload {
 }
 
 /** 组装模型占比明细（默认近 30 天；share 为占总 tokens 百分比，降序）。 */
-export async function buildModels(svc: LensServices, params: { from?: string | null; to?: string | null }): Promise<ModelsPayload> {
-  const outcome = await ensureData(svc)
+export async function buildModels(
+  svc: LensServices,
+  params: { from?: string | null; to?: string | null; force?: boolean },
+): Promise<ModelsPayload> {
+  const outcome = await ensureData(svc, { force: params.force === true })
   const now = Date.now()
   const from = parseTimeParam(params.from ?? null, startOfDayMs(now) - 29 * DAY_MS)
   const to = parseTimeParam(params.to ?? null, now)
